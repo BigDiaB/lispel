@@ -1,0 +1,13 @@
+
+
+gxx: clang
+gxxflags: -O0
+cxxflags: -g -std=c89 -W -Wall -Wextra
+out: lispel
+includes: -I../libs/include
+lib_path: -L../libs/lib
+libraries: -lLSD
+source: ../src/implementations.c
+debugger: none
+dependencies: LSD
+d_type: static
