@@ -961,10 +961,20 @@ void lispel_table_new(char* result, char** args, int* types,struct lispel_enviro
     }
 
     if (strstr(args[1],"."))
+    {
+        int i;
+
+        for (i = strlen(args[1] + 1); i > 0 && args[1][i + 1] != '.'; i--)
         {
-            printf("%s:%d: Error!:\n\tTables können nicht mit Dezimalzahlen initialisiert werden!",__FUNCTION__,__LINE__);
+            if (args[1][i] == '0' || args[1][i] == '.')
+                args[1][i] = 0;
+        } 
+        if (strstr(args[1],"."))
+        {
+            printf("%s:%d: Error!:\n\tTables können nicht mit Dezimalzahlen initialisiert werden!: %s\n",__FUNCTION__,__LINE__,args[1]);
             exit(EXIT_FAILURE);
         }
+    }
 
     strcpy(env->variables[env->variables_used].name,args[0]);
 
@@ -1003,10 +1013,20 @@ void lispel_table_at(char* result, char** args, int* types,struct lispel_environ
     }
 
     if (strstr(args[1],"."))
+    {
+        int i;
+
+        for (i = strlen(args[1] + 1); i > 0 && args[1][i + 1] != '.'; i--)
+        {
+            if (args[1][i] == '0' || args[1][i] == '.')
+                args[1][i] = 0;
+        } 
+        if (strstr(args[1],"."))
         {
             printf("%s:%d: Error!:\n\tTables können nicht mit Dezimalzahlen geindext werden!",__FUNCTION__,__LINE__);
             exit(EXIT_FAILURE);
-        }
+        }        
+    }
 
     int index;
     if (EOF == sscanf(args[1],"%d",&index))
@@ -1554,13 +1574,29 @@ float lispel_get_var(struct lispel_environment* env, char* var_name)
 {
     int i;
     for (i = 0; i < env->variables_used; i++)
-        if ((0 == strcmp(var_name,env->variables[i].name)))
+        if ((0 == strcmp(var_name,env->variables[i].name)) && env->variables[i].type == variable)
         {
             if (strstr(env->variables[i].value,"."))
             {
-                float f;
-                sscanf(env->variables[i].value,"%f",&f);
-                return f;
+                int j;
+
+                for (j = strlen(env->variables[i].value + 1); j > 0 && env->variables[i].value[j + 1] != '.'; j--)
+                {
+                    if (env->variables[i].value[j] == '0' || env->variables[i].value[j] == '.')
+                        env->variables[i].value[j] = 0;
+                }
+                if (strstr(env->variables[i].value,"."))
+                {
+                    float f;
+                    sscanf(env->variables[i].value,"%f",&f);
+                    return f;
+                }
+                else
+                {
+                    int f;
+                    sscanf(env->variables[i].value,"%d",&f);
+                    return f;
+                }
             }
             else
             {
@@ -1571,7 +1607,50 @@ float lispel_get_var(struct lispel_environment* env, char* var_name)
 
         }
     {
-        printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,var_name);
+        printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s\n",__FUNCTION__,__LINE__,var_name);
+        exit(EXIT_FAILURE);
+    }
+    return 0;
+}
+
+float lispel_get_array_at(struct lispel_environment* env, char* var_name, int index)
+{
+    int i;
+    for (i = 0; i < env->variables_used; i++)
+        if ((0 == strcmp(var_name,env->variables[i].name)) && env->variables[i].type == table)
+        {
+            if (strstr(env->variables[i].value,"."))
+            {
+                int j;
+
+                for (j = strlen(env->variables[i].value + 1); j > 0 && env->variables[i].value[j + 1] != '.'; j--)
+                {
+                    if (env->variables[i].table_values[index][j] == '0' || env->variables[i].table_values[index][j] == '.')
+                        env->variables[i].table_values[index][j] = 0;
+                }
+                if (strstr(env->variables[i].table_values[index],"."))
+                {
+                    float f;
+                    sscanf(env->variables[i].table_values[index],"%f",&f);
+                    return f;
+                }
+                else
+                {
+                    int f;
+                    sscanf(env->variables[i].table_values[index],"%d",&f);
+                    return f;
+                }
+            }
+            else
+            {
+                int f;
+                sscanf(env->variables[i].table_values[index],"%d",&f);
+                return f;
+            }
+
+        }
+    {
+        printf("%s:%d: Error!:\n\tTable nicht gefunden: %s\n",__FUNCTION__,__LINE__,var_name);
         exit(EXIT_FAILURE);
     }
     return 0;
@@ -1621,7 +1700,18 @@ int main(__attribute__((unused))int argc, __attribute__((unused))char* argv[])
 {
     struct lispel_environment* env = lispel_init();
 
-    char* code = "(t table 10) (= (a table 9) 25) (p (a table 9)) (c 10) (d table)";
+    char* code =
+    "(t table (/ 4 2))"
+
+    "(= (a table 0) (+ 12 12))"
+    "(= (a table 1) (+ 400 12))"
+
+    "(p (a table 1))"
+    "(c 32)"
+    "(p (a table 0))"
+    "(c 10)"
+
+    "(d table)";
 
     lispel_do(code,env);
 
