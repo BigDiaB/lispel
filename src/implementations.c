@@ -1,44 +1,26 @@
 
-#include <LSD/LSD.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdbool.h>
+#include <string.h>
 
 #include "lispel.h"
 
-bool is_number(char* data)
-{
-    int i;
-    bool is_number = false;
-    while(*data)
-    {
-        for (i = 45; i < 58; i++)
-        {
-            if (i == 47)
-                i++;
-            if (*data == i)
-                is_number = true;
-            if (*data == ' ')
-                return false;
-        }
-        if (!is_number)
-            return false;
-        data++;
-    }
-    return true;
-}
-
-
-enum lispel_arg_type {
-    none,number,string,variable,operator,ob,cb,expression
+enum lispel_type {
+    none,number,variable,table,operator,ob,cb,expression
 };
 
 struct lispel_variable
 {
     char name[1024];
-    char value[1024];
-    enum lispel_arg_type type;
+    char* value;
+    char** table_values;
+    int table_length;
+    enum lispel_type type;
 };
 
 struct lispel_token {
-    enum lispel_arg_type type;
+    enum lispel_type type;
     char data[1024];
     int id;
 };
@@ -86,7 +68,7 @@ struct lispel_state
 struct lispel_operator {
     char* name;
     int num_args;
-    enum lispel_arg_type* arg_types;
+    enum lispel_type* arg_types;
     void (*func)(char*, char**, int*,struct lispel_environment*);
 };
 
@@ -116,9 +98,6 @@ void gen_chunks(struct lispel_environment* env, char* line)
                 i++;
             }
             
-            #ifdef DEBUG
-            LSD_Log(LSD_ltMESSAGE,"CHUNK ADDED!");
-            #endif
 
             env->chunks[env->chunks_used] = chunk;
             env->chunks_used++;
@@ -149,17 +128,17 @@ void gen_tokens(char* code, struct lispel_environment* env, struct lispel_state*
 
             if (depth > 126)
             {
-                LSD_Log(LSD_ltERROR,"Maximale Tiefe von 127 überschritten!");
+                {
+                    printf("%s:%d: Error!:\n\tMaximale Tiefe von 127 überschritten!",__FUNCTION__,__LINE__);
+                    exit(EXIT_FAILURE);
                 }
+            }
             depth++;
             tok.id = id;
             id++;
             st->tokens[(st->tokens_used)] = tok;
             (st->tokens_used)++;
             {
-            #ifdef DEBUG
-            LSD_Log(LSD_ltMESSAGE,"Opening Brace hinzugefügt!: Depth: %d",tok.data[0]);
-            #endif
             }
         }
         else if (*code == ')')
@@ -170,8 +149,11 @@ void gen_tokens(char* code, struct lispel_environment* env, struct lispel_state*
 
             if (depth < 0)
             {
-                LSD_Log(LSD_ltMESSAGE,"%s",code);
-                LSD_Log(LSD_ltERROR,"Minimale Tiefe von 0 unterschritten!");
+                printf("%s",code);
+                {
+                    printf("%s:%d: Error!:\n\tMinimale Tiefe von 0 unterschritten!",__FUNCTION__,__LINE__);
+                    exit(EXIT_FAILURE);
+                }
             }
 
 
@@ -180,34 +162,6 @@ void gen_tokens(char* code, struct lispel_environment* env, struct lispel_state*
             st->tokens[(st->tokens_used)] = tok;
             (st->tokens_used)++;
             {
-            #ifdef DEBUG
-            LSD_Log(LSD_ltMESSAGE,"Closing Brace hinzugefügt!: Depth: %d",tok.data[0]);
-            #endif
-            }
-        }
-        else if (*code == '"')
-        {
-            char str[1024] = {0};
-            int i = 0;
-            code++;
-            while(*code != '"')
-            {
-                str[i] = *code;
-                i++;
-                code++;
-            }
-
-            tok.type = string;
-            strcpy(tok.data,str); 
-
-            tok.id = id;
-            id++;
-            st->tokens[(st->tokens_used)] = tok;
-            (st->tokens_used)++;
-            {
-            #ifdef DEBUG
-            LSD_Log(LSD_ltMESSAGE,"String hinzugefügt!: Inhalt: %s",tok.data);
-            #endif
             }
         }
         else if (*code < 58 && *code > 44 && *code != 47 && !(*code == '-' && (*(code + 1) == ' ' || *(code + 1) == '(' || *(code + 1) == ')')))
@@ -222,7 +176,25 @@ void gen_tokens(char* code, struct lispel_environment* env, struct lispel_state*
             }
             code--;
 
-            if (is_number(num_test))
+            bool is_number = false;
+            char* data = code;
+            while(*data)
+            {
+                for (i = 45; i < 58; i++)
+                {
+                    if (i == 47)
+                        i++;
+                    if (*data == i)
+                        is_number = true;
+                    if (*data == ' ')
+                        break;
+                }
+                if (!is_number)
+                    break;
+                data++;
+            }
+
+            if (is_number)
             {
                 tok.type = number;
                 strcpy(tok.data,num_test); 
@@ -231,11 +203,6 @@ void gen_tokens(char* code, struct lispel_environment* env, struct lispel_state*
                 id++;
                 st->tokens[(st->tokens_used)] = tok;
                 (st->tokens_used)++;
-                {
-                #ifdef DEBUG
-                LSD_Log(LSD_ltMESSAGE,"Zahl hinzugefügt!: Wert: %s",tok.data);
-                #endif
-                }
             }
         }
         else if (*code != ' ' && *code != '\n')
@@ -256,7 +223,7 @@ void gen_tokens(char* code, struct lispel_environment* env, struct lispel_state*
 
             for (i = 0; i < env->op_list.used; i++)
             {
-                if (LSD_Sys_strcmp(tok.data,env->op_list.operators[i].name))
+                if ((0 == strcmp(tok.data,env->op_list.operators[i].name)))
                     found = true;
             }
 
@@ -268,9 +235,6 @@ void gen_tokens(char* code, struct lispel_environment* env, struct lispel_state*
                 id++;
                 st->tokens[(st->tokens_used)] = tok;
                 (st->tokens_used)++;
-                #ifdef DEBUG
-                LSD_Log(LSD_ltMESSAGE,"Operator hinzugefügt!: Art: %s",tok.data);
-                #endif
             }
             else
             {
@@ -278,7 +242,7 @@ void gen_tokens(char* code, struct lispel_environment* env, struct lispel_state*
                 int j;
                 for (j = 0; j < env->variables_used; j++)
                 {
-                    if (LSD_Sys_strcmp(op,env->variables[j].name))
+                    if ((0 == strcmp(op,env->variables[j].name)))
                     {
                         var_found = true;
                         tok.type = variable;
@@ -286,9 +250,6 @@ void gen_tokens(char* code, struct lispel_environment* env, struct lispel_state*
                         id++;
                         st->tokens[(st->tokens_used)] = tok;
                         (st->tokens_used)++;
-                        #ifdef DEBUG
-                        LSD_Log(LSD_ltMESSAGE,"Variablen-Token hinzugefügt!: Name: %s Wert: %s",env->variables[j].name,env->variables[j].value);
-                        #endif
                         break;
                     }
                 }
@@ -299,9 +260,6 @@ void gen_tokens(char* code, struct lispel_environment* env, struct lispel_state*
                     id++;
                     st->tokens[(st->tokens_used)] = tok;
                     (st->tokens_used)++;
-                    #ifdef DEBUG
-                    LSD_Log(LSD_ltMESSAGE,"Variablen-Token hinzugefügt(nofound)!: Name: %s Wert: %s",op,0);
-                    #endif
                 }
             }
         }
@@ -373,22 +331,16 @@ void do_expression(struct lispel_expression* expr, struct lispel_environment* en
             if (highest == -1)
                 break;
             tokens[highest_index].data[0] = -1;
-            #ifdef DEBUG
-            LSD_Log(LSD_ltMESSAGE,"HIGHEST IS %d IN %d!",highest,highest_index);
-            int gsus;
-            for (gsus = 0; gsus < num_tokens; gsus++)
-                if (tokens[gsus].type != ob && tokens[gsus].type != cb)
-                    LSD_Log(LSD_ltMESSAGE,"%d -> %s",tokens[gsus].type,tokens[gsus].data);
-                else
-                    LSD_Log(LSD_ltMESSAGE,"%d -> %d",tokens[gsus].type,tokens[gsus].data[0]);
-            #endif
             int op_index = -1;
             for (j = 0; j < env->op_list.used; j++)
-                if (LSD_Sys_strcmp(tokens[highest_index + 1].data,env->op_list.operators[j].name))
+                if ((0 == strcmp(tokens[highest_index + 1].data,env->op_list.operators[j].name)))
                     op_index = j;
 
             if (op_index == -1)
-                LSD_Log(LSD_ltERROR,"Operator nicht gefunden: %s : %d",tokens[highest_index + 1].data);
+                {
+                    printf("%s:%d: Error!:\n\tOperator nicht gefunden: %s",__FUNCTION__,__LINE__,tokens[highest_index + 1].data);
+                    exit(EXIT_FAILURE);
+                }
 
             char** args = malloc(sizeof(char*) * (env->op_list.operators[op_index].num_args + 1));
 
@@ -402,23 +354,29 @@ void do_expression(struct lispel_expression* expr, struct lispel_environment* en
             for (j = 0; j < env->op_list.operators[op_index].num_args; j++)
             {
                 if (tokens[highest_index + j + 2].type == cb)
-                    LSD_Log(LSD_ltERROR,"Zu wenige Argumente für %s-Operator!",env->op_list.operators[op_index].name);
+                    {
+                        printf("%s:%d: Error!:\n\tZu wenige Argumente für %s-Operator!",__FUNCTION__,__LINE__,env->op_list.operators[op_index].name);
+                        exit(EXIT_FAILURE);
+                    }
 
                 if (tokens[highest_index + j + 2].type != variable && tokens[highest_index + j + 2].type != env->op_list.operators[op_index].arg_types[j])
-                    LSD_Log(LSD_ltERROR,"Falscher Datentyp für %s-Operator Argument Nummer %d: %d != %d",env->op_list.operators[op_index].name,j,tokens[highest_index + j + 2].type,env->op_list.operators[op_index].arg_types[j]);
+                    {
+                        printf("%s:%d: Error!:\n\tFalscher Datentyp für %s-Operator Argument Nummer %d: %d != %d",__FUNCTION__,__LINE__,env->op_list.operators[op_index].name,j,tokens[highest_index + j + 2].type,env->op_list.operators[op_index].arg_types[j]);
+                        exit(EXIT_FAILURE);
+                    }
 
                 strcpy(args[j],tokens[highest_index + j + 2].data);
                 types[j] = tokens[highest_index + j + 2].type;
             }
 
             if (tokens[highest_index + j + 2].type != cb)
-                LSD_Log(LSD_ltERROR,"Zu viele Argumente für %s-Operator!",env->op_list.operators[op_index].name);
+                {
+                    printf("%s:%d: Error!:\n\tZu viele Argumente für %s-Operator!",__FUNCTION__,__LINE__,env->op_list.operators[op_index].name);
+                    exit(EXIT_FAILURE);
+                }
 
             args[env->op_list.operators[op_index].num_args] = (void*)expr;
 
-            #ifdef DEBUG
-            LSD_Log(LSD_ltMESSAGE,"Führe %s-Operator aus!",env->op_list.operators[op_index].name);
-            #endif
             env->op_list.operators[op_index].func(result.data,args,types,env);
 
             int k = 0;
@@ -427,18 +385,31 @@ void do_expression(struct lispel_expression* expr, struct lispel_environment* en
             free(args);
             free(types);
 
-            #ifdef DEBUG
-            LSD_Log(LSD_ltMESSAGE,"RESULT: %s",result.data);
-            #endif
 
             if (highest == 0)
                 strcpy(end_result,result.data);
 
 
-            if (is_number(result.data))
+            bool is_number = false;
+            char* data = result.data;
+            while(*data)
+            {
+                for (i = 45; i < 58; i++)
+                {
+                    if (i == 47)
+                        i++;
+                    if (*data == i)
+                        is_number = true;
+                    if (*data == ' ')
+                        break;
+                }
+                if (!is_number)
+                    break;
+                data++;
+            }
+
+            if (is_number)
                 result.type = number;
-            else if (strstr(result.data,"\""))
-                result.type = string;
             else
                 result.type = variable;
 
@@ -521,10 +492,13 @@ void lispel_do_block(char* result, char** args, int* __attribute__((unused))type
 {
     int i,num = -1;
     for (i = 0; i < env->blocks_used; i++)
-        if (LSD_Sys_strcmp(args[0],env->blocks[i].name))
+        if ((0 == strcmp(args[0],env->blocks[i].name)))
             num = i;
     if (num == -1)
-        LSD_Log(LSD_ltERROR,"Block nicht gefunden: %s",args[0]);
+        {
+            printf("%s:%d: Error!:\n\tBlock nicht gefunden: %s",__FUNCTION__,__LINE__,args[0]);
+            exit(EXIT_FAILURE);
+        }
 
     strcpy(result,"0");
 
@@ -548,25 +522,31 @@ void lispel_if_do_block(char* result, char** args, int* types, struct lispel_env
 {
     int i,num = -1;
     for (i = 0; i < env->blocks_used; i++)
-        if (LSD_Sys_strcmp(args[1],env->blocks[i].name))
+        if ((0 == strcmp(args[1],env->blocks[i].name)))
             num = i;
     if (num == -1)
-        LSD_Log(LSD_ltERROR,"Block nicht gefunden: %s",args[1]);
+        {
+            printf("%s:%d: Error!:\n\tBlock nicht gefunden: %s",__FUNCTION__,__LINE__,args[1]);
+            exit(EXIT_FAILURE);
+        }
 
     if (types[0] == variable)
     {
         int num = -1,g;
         for (g = 0; g < env->variables_used; g++)
-            if (LSD_Sys_strcmp(args[0],env->variables[g].name))
+            if ((0 == strcmp(args[0],env->variables[g].name)))
                 num = g;
         if (num == -1)
-            LSD_Log(LSD_ltERROR,"Variable nicht gefunden: %s",args[0]);
+            {
+                printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[0]);
+                exit(EXIT_FAILURE);
+            }
         strcpy(args[0],env->variables[num].value);
     }
 
     strcpy(result,args[0]);
 
-    if (!LSD_Sys_strcmp(args[0],"0"))
+    if (!(0 == strcmp(args[0],"0")))
     {
         struct lispel_state st = {0};
         int i;
@@ -593,14 +573,17 @@ void lispel_negate(char* result, char** args, int* types,struct lispel_environme
     {
         int num = -1;
         for (g = 0; g < env->variables_used; g++)
-            if (LSD_Sys_strcmp(args[0],env->variables[g].name))
+            if ((0 == strcmp(args[0],env->variables[g].name)))
                 num = g;
         if (num == -1)
-            LSD_Log(LSD_ltERROR,"Variable nicht gefunden: %s",args[0]);
+            {
+                printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[0]);
+                exit(EXIT_FAILURE);
+            }
         strcpy(args[0],env->variables[num].value);
     }
 
-    strcpy(result,LSD_Sys_strcmp("0",args[0]) ? "1" : "0");
+    strcpy(result,(0 == strcmp("0",args[0]) ? "1" : "0"));
 }
 
 void lispel_bigger(char* result, char** args, int* types,struct lispel_environment* env)
@@ -610,20 +593,26 @@ void lispel_bigger(char* result, char** args, int* types,struct lispel_environme
     {
         int num = -1;
         for (g = 0; g < env->variables_used; g++)
-            if (LSD_Sys_strcmp(args[0],env->variables[g].name))
+            if ((0 == strcmp(args[0],env->variables[g].name)))
                 num = g;
         if (num == -1)
-            LSD_Log(LSD_ltERROR,"Variable nicht gefunden: %s",args[0]);
+            {
+                printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[0]);
+                exit(EXIT_FAILURE);
+            }
         strcpy(args[0],env->variables[num].value);
     }
     if (types[1] == variable)
     {
         int num = -1;
         for (g = 0; g < env->variables_used; g++)
-            if (LSD_Sys_strcmp(args[1],env->variables[g].name))
+            if ((0 == strcmp(args[1],env->variables[g].name)))
                 num = g;
         if (num == -1)
-            LSD_Log(LSD_ltERROR,"Variable nicht gefunden: %s",args[1]);
+            {
+                printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[1]);
+                exit(EXIT_FAILURE);
+            }
         strcpy(args[1],env->variables[num].value);
     }
 
@@ -691,20 +680,26 @@ void lispel_smaller(char* result, char** args, int* types,struct lispel_environm
     {
         int num = -1;
         for (g = 0; g < env->variables_used; g++)
-            if (LSD_Sys_strcmp(args[0],env->variables[g].name))
+            if ((0 == strcmp(args[0],env->variables[g].name)))
                 num = g;
         if (num == -1)
-            LSD_Log(LSD_ltERROR,"Variable nicht gefunden: %s",args[0]);
+            {
+                printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[0]);
+                exit(EXIT_FAILURE);
+            }
         strcpy(args[0],env->variables[num].value);
     }
     if (types[1] == variable)
     {
         int num = -1;
         for (g = 0; g < env->variables_used; g++)
-            if (LSD_Sys_strcmp(args[1],env->variables[g].name))
+            if ((0 == strcmp(args[1],env->variables[g].name)))
                 num = g;
         if (num == -1)
-            LSD_Log(LSD_ltERROR,"Variable nicht gefunden: %s",args[1]);
+            {
+                printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[1]);
+                exit(EXIT_FAILURE);
+            }
         strcpy(args[1],env->variables[num].value);
     }
 
@@ -772,24 +767,30 @@ void lispel_equality(char* result, char** args, int* types,struct lispel_environ
     {
         int num = -1;
         for (g = 0; g < env->variables_used; g++)
-            if (LSD_Sys_strcmp(args[0],env->variables[g].name))
+            if ((0 == strcmp(args[0],env->variables[g].name)))
                 num = g;
         if (num == -1)
-            LSD_Log(LSD_ltERROR,"Variable nicht gefunden: %s",args[0]);
+            {
+                printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[0]);
+                exit(EXIT_FAILURE);
+            }
         strcpy(args[0],env->variables[num].value);
     }
     if (types[1] == variable)
     {
         int num = -1;
         for (g = 0; g < env->variables_used; g++)
-            if (LSD_Sys_strcmp(args[1],env->variables[g].name))
+            if ((0 == strcmp(args[1],env->variables[g].name)))
                 num = g;
         if (num == -1)
-            LSD_Log(LSD_ltERROR,"Variable nicht gefunden: %s",args[1]);
+            {
+                printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[1]);
+                exit(EXIT_FAILURE);
+            }
         strcpy(args[1],env->variables[num].value);
     }
 
-    strcpy(result,LSD_Sys_strcmp(args[0],args[1]) ? "1" : "0");
+    strcpy(result,(0 == strcmp(args[0],args[1]) ? "1" : "0"));
 }
 
 void lispel_character(char* result, char** args, int* types,struct lispel_environment* env)
@@ -799,10 +800,13 @@ void lispel_character(char* result, char** args, int* types,struct lispel_enviro
     {
         int num = -1;
         for (g = 0; g < env->variables_used; g++)
-            if (LSD_Sys_strcmp(args[0],env->variables[g].name))
+            if ((0 == strcmp(args[0],env->variables[g].name)))
                 num = g;
         if (num == -1)
-            LSD_Log(LSD_ltERROR,"Variable nicht gefunden: %s",args[0]);
+            {
+                printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[0]);
+                exit(EXIT_FAILURE);
+            }
         strcpy(args[0],env->variables[num].value);
     }
     sscanf(args[0],"%d",&g);
@@ -820,10 +824,13 @@ void lispel_print(char* result, char** args, int* types,struct lispel_environmen
         int g;
         int num = -1;
         for (g = 0; g < env->variables_used; g++)
-            if (LSD_Sys_strcmp(args[0],env->variables[g].name))
+            if ((0 == strcmp(args[0],env->variables[g].name)))
                 num = g;
         if (num == -1)
-            LSD_Log(LSD_ltERROR,"Variable nicht gefunden: %s",args[0]);
+            {
+                printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[0]);
+                exit(EXIT_FAILURE);
+            }
         strcpy(args[0],env->variables[num].value);
     }
     printf("%s",args[0]);
@@ -831,18 +838,44 @@ void lispel_print(char* result, char** args, int* types,struct lispel_environmen
 
 void lispel_var_destroy(char* result, char** args, int* types,struct lispel_environment* env)
 {
-    int i, num = -1;
     if (types[0] == variable)
     {
+        int i, num = -1;
         for (i = 0; i < env->variables_used; i++)
-            if (LSD_Sys_strcmp(args[0],env->variables[i].name))
+            if ((0 == strcmp(args[0],env->variables[i].name)))
                 num = i;
         if (num == -1)
-            LSD_Log(LSD_ltERROR,"Variable nicht gefunden: %s",args[0]);
+            {
+                printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[0]);
+                exit(EXIT_FAILURE);
+            }
+
+        free(env->variables[num].value);
+
         for (i = num; i < env->variables_used - 1; i++)
             env->variables[i] = env->variables[i + 1];
         env->variables_used--;
     }
+
+    if (types[0] == table)
+    {
+        int num = -1,g;
+        for (g = 0; g < env->variables_used; g++)
+            if ((0 == strcmp(args[0],env->variables[g].name)))
+                num = g;
+        if (num == -1)
+            {
+                printf("%s:%d: Error!:\n\tTable nicht gefunden: %s",__FUNCTION__,__LINE__,args[0]);
+                exit(EXIT_FAILURE);
+            }
+
+        free(env->variables[num].table_values);
+
+        for (g = num; g < env->variables_used - 1; g++)
+                env->variables[g] = env->variables[g + 1];
+            env->variables_used--;
+    }
+
     strcpy(result,"0");
 }
 
@@ -855,21 +888,27 @@ void lispel_var_assign(char* result, char** args, int* types,struct lispel_envir
     {
         int num = -1;
         for (g = 0; g < env->variables_used; g++)
-            if (LSD_Sys_strcmp(args[1],env->variables[g].name))
+            if ((0 == strcmp(args[1],env->variables[g].name)))
                 num = g;
         if (num == -1)
-            LSD_Log(LSD_ltERROR,"Variable nicht gefunden: %s",args[1]);
+            {
+                printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[1]);
+                exit(EXIT_FAILURE);
+            }
         strcpy(args[1],env->variables[num].value);
     }
 
     for (g = 0; g < env->variables_used; g++)
     {
-        if (LSD_Sys_strcmp(args[0],env->variables[g].name))
+        if ((0 == strcmp(args[0],env->variables[g].name)))
             var = &env->variables[g];
     }
 
     if (var == NULL)
-            LSD_Log(LSD_ltERROR,"Variable nicht gefunden: %s",args[0]);
+            {
+                printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[0]);
+                exit(EXIT_FAILURE);
+            }
 
     strcpy(var->value,args[1]);
     strcpy(result,args[0]);
@@ -879,16 +918,127 @@ void lispel_var_number(char* result, char** args, int* types,struct lispel_envir
 {
 
     if (types[0] != variable)
-        LSD_Log(LSD_ltERROR,"Kein gültiger Variablen-Name: %s",args[0]);
+        {
+            printf("%s:%d: Error!:\n\tKein gültiger Variablen-Name: %s",__FUNCTION__,__LINE__,args[0]);
+            exit(EXIT_FAILURE);
+        }
 
     struct lispel_variable var;
-    var.type = number;
+    var.type = variable;
 
     strcpy(var.name,args[0]);
+    var.value = malloc(1024);
     strcpy(var.value,args[1]);
     env->variables[env->variables_used] = var;
     env->variables_used++;
     strcpy(result,args[0]);
+}
+
+void lispel_table_new(char* result, char** args, int* types,struct lispel_environment* env)
+{
+
+    if (types[0] != variable)
+        {
+            printf("%s:%d: Error!:\n\tKein gültiger Table-Name: %s",__FUNCTION__,__LINE__,args[0]);
+            exit(EXIT_FAILURE);
+        }
+
+    env->variables[env->variables_used].type = table;
+
+    int g;
+    if (types[1] == variable)
+    {
+        int num = -1;
+        for (g = 0; g < env->variables_used; g++)
+            if ((0 == strcmp(args[1],env->variables[g].name)))
+                num = g;
+        if (num == -1)
+        {
+            printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[1]);
+            exit(EXIT_FAILURE);
+        }
+        strcpy(args[1],env->variables[num].value);
+    }
+
+    if (strstr(args[1],"."))
+        {
+            printf("%s:%d: Error!:\n\tTables können nicht mit Dezimalzahlen initialisiert werden!",__FUNCTION__,__LINE__);
+            exit(EXIT_FAILURE);
+        }
+
+    strcpy(env->variables[env->variables_used].name,args[0]);
+
+    int size;
+    if (EOF == sscanf(args[1],"%d",&size))
+    {
+        printf("%s:%d: Error!:\n\tKein gültiger Initilisierungswert!: %s\n",__FUNCTION__,__LINE__,args[1]);
+        exit(EXIT_FAILURE);
+    }
+
+    env->variables[env->variables_used].table_length = size;
+    env->variables[env->variables_used].table_values = malloc(size * sizeof(char*));
+
+    for (g = 0; g < size; g++)
+        env->variables[env->variables_used].table_values[g] = malloc(1024);
+    
+    env->variables_used++;
+    strcpy(result,args[0]);
+}
+
+void lispel_table_at(char* result, char** args, int* types,struct lispel_environment* env)
+{
+    int g;
+    if (types[1] == variable)
+    {
+        int num = -1;
+        for (g = 0; g < env->variables_used; g++)
+            if ((0 == strcmp(args[1],env->variables[g].name)))
+                num = g;
+        if (num == -1)
+            {
+                printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[1]);
+                exit(EXIT_FAILURE);
+            }
+        strcpy(args[1],env->variables[num].value);
+    }
+
+    if (strstr(args[1],"."))
+        {
+            printf("%s:%d: Error!:\n\tTables können nicht mit Dezimalzahlen geindext werden!",__FUNCTION__,__LINE__);
+            exit(EXIT_FAILURE);
+        }
+
+    int index;
+    if (EOF == sscanf(args[1],"%d",&index))
+    {
+        printf("%s:%d: Error!:\n\tKein gültiger Index!: %s\n",__FUNCTION__,__LINE__,args[1]);
+        exit(EXIT_FAILURE);
+    }
+
+    int num = -1;
+    for (g = 0; g < env->variables_used; g++)
+    {
+        if ((0 == strcmp(args[0],env->variables[g].name)) && env->variables[g].type == table)
+            num = g;
+    }
+    if (num == -1)
+    {
+        printf("%s:%d: Error!:\n\tTable nicht gefunden: %s",__FUNCTION__,__LINE__,args[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    if (index >= env->variables[num].table_length)
+    {
+        printf("%s:%d: Error!:\n\tTable hat nicht so viele Plätze: %d Höchster Index: %d",__FUNCTION__,__LINE__,index,env->variables[num].table_length - 1);
+        exit(EXIT_FAILURE);
+    }
+
+    strcpy(env->variables[0].name,args[0]);
+    strcat(env->variables[0].name,"_table_temp");
+
+    env->variables[0].value = env->variables[num].table_values[index];
+
+    strcpy(result,env->variables[0].name);
 }
 
 void lispel_add(char* result, char** args, int* types,struct lispel_environment* env)
@@ -905,10 +1055,13 @@ void lispel_add(char* result, char** args, int* types,struct lispel_environment*
         {
             int num = -1;
             for (g = 0; g < env->variables_used; g++)
-                if (LSD_Sys_strcmp(args[l],env->variables[g].name))
+                if ((0 == strcmp(args[l],env->variables[g].name)))
                     num = g;
             if (num == -1)
-                LSD_Log(LSD_ltERROR,"Variable nicht gefunden: %s",args[l]);
+                {
+                    printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[l]);
+                    exit(EXIT_FAILURE);
+                }
             strcpy(args[l],env->variables[num].value);
         }
     }
@@ -982,10 +1135,13 @@ void lispel_sub(char* result, char** args, int* types,struct lispel_environment*
         {
             int num = -1;
             for (g = 0; g < env->variables_used; g++)
-                if (LSD_Sys_strcmp(args[l],env->variables[g].name))
+                if ((0 == strcmp(args[l],env->variables[g].name)))
                     num = g;
             if (num == -1)
-                LSD_Log(LSD_ltERROR,"Variable nicht gefunden: %s",args[l]);
+                {
+                    printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[l]);
+                    exit(EXIT_FAILURE);
+                }
             strcpy(args[l],env->variables[num].value);
         }
     }
@@ -1059,10 +1215,13 @@ void lispel_mul(char* result, char** args, int* types,struct lispel_environment*
         {
             int num = -1;
             for (g = 0; g < env->variables_used; g++)
-                if (LSD_Sys_strcmp(args[l],env->variables[g].name))
+                if ((0 == strcmp(args[l],env->variables[g].name)))
                     num = g;
             if (num == -1)
-                LSD_Log(LSD_ltERROR,"Variable nicht gefunden: %s",args[l]);
+                {
+                    printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[l]);
+                    exit(EXIT_FAILURE);
+                }
             strcpy(args[l],env->variables[num].value);
         }
     }
@@ -1136,10 +1295,13 @@ void lispel_dib(char* result, char** args, int* types,struct lispel_environment*
         {
             int num = -1;
             for (g = 0; g < env->variables_used; g++)
-                if (LSD_Sys_strcmp(args[l],env->variables[g].name))
+                if ((0 == strcmp(args[l],env->variables[g].name)))
                     num = g;
             if (num == -1)
-                LSD_Log(LSD_ltERROR,"Variable nicht gefunden: %s",args[l]);
+                {
+                    printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[l]);
+                    exit(EXIT_FAILURE);
+                }
             strcpy(args[l],env->variables[num].value);
         }
     }
@@ -1205,148 +1367,169 @@ void init_std_ops(struct lispel_op_list* op_list)
 {
 	
 		
-		(*op_list).operators[(*op_list).used].name = "+";
-	    (*op_list).operators[(*op_list).used].num_args = 2;
-	    (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_arg_type) * (*op_list).operators[(*op_list).used].num_args);
-	    (*op_list).operators[(*op_list).used].arg_types[0] = number;
-	    (*op_list).operators[(*op_list).used].arg_types[1] = number;
-	    (*op_list).operators[(*op_list).used].func = lispel_add;
-	    (*op_list).used++;
+	(*op_list).operators[(*op_list).used].name = "+";
+    (*op_list).operators[(*op_list).used].num_args = 2;
+    (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_type) * (*op_list).operators[(*op_list).used].num_args);
+    (*op_list).operators[(*op_list).used].arg_types[0] = number;
+    (*op_list).operators[(*op_list).used].arg_types[1] = number;
+    (*op_list).operators[(*op_list).used].func = lispel_add;
+    (*op_list).used++;
 
 
-	
-	
-	    (*op_list).operators[(*op_list).used].name = "-";
-	    (*op_list).operators[(*op_list).used].num_args = 2;
-	    (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_arg_type) * (*op_list).operators[(*op_list).used].num_args);
-	    (*op_list).operators[(*op_list).used].arg_types[0] = number;
-	    (*op_list).operators[(*op_list).used].arg_types[1] = number;
-	    (*op_list).operators[(*op_list).used].func = lispel_sub;
-	    (*op_list).used++;
 
 
-	
-	
-	    (*op_list).operators[(*op_list).used].name = "*";
-	    (*op_list).operators[(*op_list).used].num_args = 2;
-	    (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_arg_type) * (*op_list).operators[(*op_list).used].num_args);
-	    (*op_list).operators[(*op_list).used].arg_types[0] = number;
-	    (*op_list).operators[(*op_list).used].arg_types[1] = number;
-	    (*op_list).operators[(*op_list).used].func = lispel_mul;
-	    (*op_list).used++;
-
-	
-    
-        (*op_list).operators[(*op_list).used].name = "/";
-        (*op_list).operators[(*op_list).used].num_args = 2;
-        (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_arg_type) * (*op_list).operators[(*op_list).used].num_args);
-        (*op_list).operators[(*op_list).used].arg_types[0] = number;
-        (*op_list).operators[(*op_list).used].arg_types[1] = number;
-        (*op_list).operators[(*op_list).used].func = lispel_dib;
-        (*op_list).used++;
-
-    
-    
-        (*op_list).operators[(*op_list).used].name = "v";
-        (*op_list).operators[(*op_list).used].num_args = 2;
-        (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_arg_type) * (*op_list).operators[(*op_list).used].num_args);
-        (*op_list).operators[(*op_list).used].arg_types[0] = variable;
-        (*op_list).operators[(*op_list).used].arg_types[1] = number;
-        (*op_list).operators[(*op_list).used].func = lispel_var_number;
-        (*op_list).used++;
-
-    
-    
-        (*op_list).operators[(*op_list).used].name = "=";
-        (*op_list).operators[(*op_list).used].num_args = 2;
-        (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_arg_type) * (*op_list).operators[(*op_list).used].num_args);
-        (*op_list).operators[(*op_list).used].arg_types[0] = variable;
-        (*op_list).operators[(*op_list).used].arg_types[1] = number;
-        (*op_list).operators[(*op_list).used].func = lispel_var_assign;
-        (*op_list).used++;
-
-    
-    
-        (*op_list).operators[(*op_list).used].name = "p";
-        (*op_list).operators[(*op_list).used].num_args = 1;
-        (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_arg_type) * (*op_list).operators[(*op_list).used].num_args);
-        (*op_list).operators[(*op_list).used].arg_types[0] = number;
-        (*op_list).operators[(*op_list).used].func = lispel_print;
-        (*op_list).used++;
-
-    
-    
-        (*op_list).operators[(*op_list).used].name = "c";
-        (*op_list).operators[(*op_list).used].num_args = 1;
-        (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_arg_type) * (*op_list).operators[(*op_list).used].num_args);
-        (*op_list).operators[(*op_list).used].arg_types[0] = number;
-        (*op_list).operators[(*op_list).used].func = lispel_character;
-        (*op_list).used++;
-
-    
-    
-        (*op_list).operators[(*op_list).used].name = "==";
-        (*op_list).operators[(*op_list).used].num_args = 2;
-        (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_arg_type) * (*op_list).operators[(*op_list).used].num_args);
-        (*op_list).operators[(*op_list).used].arg_types[0] = number;
-        (*op_list).operators[(*op_list).used].arg_types[1] = number;
-        (*op_list).operators[(*op_list).used].func = lispel_equality;
-        (*op_list).used++;
+    (*op_list).operators[(*op_list).used].name = "-";
+    (*op_list).operators[(*op_list).used].num_args = 2;
+    (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_type) * (*op_list).operators[(*op_list).used].num_args);
+    (*op_list).operators[(*op_list).used].arg_types[0] = number;
+    (*op_list).operators[(*op_list).used].arg_types[1] = number;
+    (*op_list).operators[(*op_list).used].func = lispel_sub;
+    (*op_list).used++;
 
 
-        (*op_list).operators[(*op_list).used].name = ">";
-        (*op_list).operators[(*op_list).used].num_args = 2;
-        (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_arg_type) * (*op_list).operators[(*op_list).used].num_args);
-        (*op_list).operators[(*op_list).used].arg_types[0] = number;
-        (*op_list).operators[(*op_list).used].arg_types[1] = number;
-        (*op_list).operators[(*op_list).used].func = lispel_bigger;
-        (*op_list).used++;
 
 
-        (*op_list).operators[(*op_list).used].name = "<";
-        (*op_list).operators[(*op_list).used].num_args = 2;
-        (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_arg_type) * (*op_list).operators[(*op_list).used].num_args);
-        (*op_list).operators[(*op_list).used].arg_types[0] = number;
-        (*op_list).operators[(*op_list).used].arg_types[1] = number;
-        (*op_list).operators[(*op_list).used].func = lispel_smaller;
-        (*op_list).used++;
+    (*op_list).operators[(*op_list).used].name = "*";
+    (*op_list).operators[(*op_list).used].num_args = 2;
+    (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_type) * (*op_list).operators[(*op_list).used].num_args);
+    (*op_list).operators[(*op_list).used].arg_types[0] = number;
+    (*op_list).operators[(*op_list).used].arg_types[1] = number;
+    (*op_list).operators[(*op_list).used].func = lispel_mul;
+    (*op_list).used++;
 
 
-        (*op_list).operators[(*op_list).used].name = "!";
-        (*op_list).operators[(*op_list).used].num_args = 1;
-        (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_arg_type) * (*op_list).operators[(*op_list).used].num_args);
-        (*op_list).operators[(*op_list).used].arg_types[0] = number;
-        (*op_list).operators[(*op_list).used].func = lispel_negate;
-        (*op_list).used++;
+
+    (*op_list).operators[(*op_list).used].name = "/";
+    (*op_list).operators[(*op_list).used].num_args = 2;
+    (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_type) * (*op_list).operators[(*op_list).used].num_args);
+    (*op_list).operators[(*op_list).used].arg_types[0] = number;
+    (*op_list).operators[(*op_list).used].arg_types[1] = number;
+    (*op_list).operators[(*op_list).used].func = lispel_dib;
+    (*op_list).used++;
 
 
-        (*op_list).operators[(*op_list).used].name = "d";
-        (*op_list).operators[(*op_list).used].num_args = 1;
-        (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_arg_type) * (*op_list).operators[(*op_list).used].num_args);
-        (*op_list).operators[(*op_list).used].arg_types[0] = variable;
-        (*op_list).operators[(*op_list).used].func = lispel_var_destroy;
-        (*op_list).used++;
+
+    (*op_list).operators[(*op_list).used].name = "=";
+    (*op_list).operators[(*op_list).used].num_args = 2;
+    (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_type) * (*op_list).operators[(*op_list).used].num_args);
+    (*op_list).operators[(*op_list).used].arg_types[0] = variable;
+    (*op_list).operators[(*op_list).used].arg_types[1] = number;
+    (*op_list).operators[(*op_list).used].func = lispel_var_assign;
+    (*op_list).used++;
 
 
-        (*op_list).operators[(*op_list).used].name = "i";
-        (*op_list).operators[(*op_list).used].num_args = 2;
-        (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_arg_type) * (*op_list).operators[(*op_list).used].num_args);
-        (*op_list).operators[(*op_list).used].arg_types[0] = number;
-        (*op_list).operators[(*op_list).used].arg_types[1] = variable;
-        (*op_list).operators[(*op_list).used].func = lispel_if_do_block;
-        (*op_list).used++; 
 
-        (*op_list).operators[(*op_list).used].name = "b";
-        (*op_list).operators[(*op_list).used].num_args = 1;
-        (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_arg_type) * (*op_list).operators[(*op_list).used].num_args);
-        (*op_list).operators[(*op_list).used].arg_types[0] = variable;
-        (*op_list).operators[(*op_list).used].func = lispel_do_block;
-        (*op_list).used++;      
+    (*op_list).operators[(*op_list).used].name = "p";
+    (*op_list).operators[(*op_list).used].num_args = 1;
+    (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_type) * (*op_list).operators[(*op_list).used].num_args);
+    (*op_list).operators[(*op_list).used].arg_types[0] = number;
+    (*op_list).operators[(*op_list).used].func = lispel_print;
+    (*op_list).used++;
+
+
+
+    (*op_list).operators[(*op_list).used].name = "c";
+    (*op_list).operators[(*op_list).used].num_args = 1;
+    (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_type) * (*op_list).operators[(*op_list).used].num_args);
+    (*op_list).operators[(*op_list).used].arg_types[0] = number;
+    (*op_list).operators[(*op_list).used].func = lispel_character;
+    (*op_list).used++;
+
+
+
+    (*op_list).operators[(*op_list).used].name = "==";
+    (*op_list).operators[(*op_list).used].num_args = 2;
+    (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_type) * (*op_list).operators[(*op_list).used].num_args);
+    (*op_list).operators[(*op_list).used].arg_types[0] = number;
+    (*op_list).operators[(*op_list).used].arg_types[1] = number;
+    (*op_list).operators[(*op_list).used].func = lispel_equality;
+    (*op_list).used++;
+
+
+    (*op_list).operators[(*op_list).used].name = ">";
+    (*op_list).operators[(*op_list).used].num_args = 2;
+    (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_type) * (*op_list).operators[(*op_list).used].num_args);
+    (*op_list).operators[(*op_list).used].arg_types[0] = number;
+    (*op_list).operators[(*op_list).used].arg_types[1] = number;
+    (*op_list).operators[(*op_list).used].func = lispel_bigger;
+    (*op_list).used++;
+
+
+    (*op_list).operators[(*op_list).used].name = "<";
+    (*op_list).operators[(*op_list).used].num_args = 2;
+    (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_type) * (*op_list).operators[(*op_list).used].num_args);
+    (*op_list).operators[(*op_list).used].arg_types[0] = number;
+    (*op_list).operators[(*op_list).used].arg_types[1] = number;
+    (*op_list).operators[(*op_list).used].func = lispel_smaller;
+    (*op_list).used++;
+
+
+    (*op_list).operators[(*op_list).used].name = "!";
+    (*op_list).operators[(*op_list).used].num_args = 1;
+    (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_type) * (*op_list).operators[(*op_list).used].num_args);
+    (*op_list).operators[(*op_list).used].arg_types[0] = number;
+    (*op_list).operators[(*op_list).used].func = lispel_negate;
+    (*op_list).used++;
+
+
+
+    (*op_list).operators[(*op_list).used].name = "v";
+    (*op_list).operators[(*op_list).used].num_args = 2;
+    (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_type) * (*op_list).operators[(*op_list).used].num_args);
+    (*op_list).operators[(*op_list).used].arg_types[0] = variable;
+    (*op_list).operators[(*op_list).used].arg_types[1] = number;
+    (*op_list).operators[(*op_list).used].func = lispel_var_number;
+    (*op_list).used++;
+
+
+
+    (*op_list).operators[(*op_list).used].name = "t";
+    (*op_list).operators[(*op_list).used].num_args = 2;
+    (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_type) * (*op_list).operators[(*op_list).used].num_args);
+    (*op_list).operators[(*op_list).used].arg_types[0] = variable;
+    (*op_list).operators[(*op_list).used].arg_types[1] = number;
+    (*op_list).operators[(*op_list).used].func = lispel_table_new;
+    (*op_list).used++;
+
+
+    (*op_list).operators[(*op_list).used].name = "d";
+    (*op_list).operators[(*op_list).used].num_args = 1;
+    (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_type) * (*op_list).operators[(*op_list).used].num_args);
+    (*op_list).operators[(*op_list).used].arg_types[0] = variable;
+    (*op_list).operators[(*op_list).used].func = lispel_var_destroy;
+    (*op_list).used++;
+
+
+    (*op_list).operators[(*op_list).used].name = "a";
+    (*op_list).operators[(*op_list).used].num_args = 2;
+    (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_type) * (*op_list).operators[(*op_list).used].num_args);
+    (*op_list).operators[(*op_list).used].arg_types[0] = table;
+    (*op_list).operators[(*op_list).used].arg_types[1] = number;
+    (*op_list).operators[(*op_list).used].func = lispel_table_at;
+    (*op_list).used++;
+
+
+    (*op_list).operators[(*op_list).used].name = "i";
+    (*op_list).operators[(*op_list).used].num_args = 2;
+    (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_type) * (*op_list).operators[(*op_list).used].num_args);
+    (*op_list).operators[(*op_list).used].arg_types[0] = number;
+    (*op_list).operators[(*op_list).used].arg_types[1] = variable;
+    (*op_list).operators[(*op_list).used].func = lispel_if_do_block;
+    (*op_list).used++; 
+
+    (*op_list).operators[(*op_list).used].name = "b";
+    (*op_list).operators[(*op_list).used].num_args = 1;
+    (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_type) * (*op_list).operators[(*op_list).used].num_args);
+    (*op_list).operators[(*op_list).used].arg_types[0] = variable;
+    (*op_list).operators[(*op_list).used].func = lispel_do_block;
+    (*op_list).used++;
 
         
-
 	if (op_list->used > op_list->max)
-		LSD_Log(LSD_ltERROR,"Nicht genug Platz für alle Operatoren!");
+	{
+        printf("%s:%d: Error!:\n\tNicht genug Platz für alle Operatoren!\n",__FUNCTION__,__LINE__);
+        exit(EXIT_FAILURE);
+    }
 }
 
 void add_to_op_list(struct lispel_op_list* op_list, struct lispel_op_list* add)
@@ -1357,7 +1540,10 @@ void add_to_op_list(struct lispel_op_list* op_list, struct lispel_op_list* add)
         op_list->operators[op_list->used + i] = add->operators[i];
 
         if (op_list->used++ >= op_list->max)
-            LSD_Log(LSD_ltERROR,"Nicht genug Platz für alle Operatoren!");
+            {
+                printf("%s:%d: Error!:\n\tNicht genug Platz für alle Operatoren!",__FUNCTION__,__LINE__);
+                exit(EXIT_FAILURE);
+            }
     }
 }
 
@@ -1368,7 +1554,7 @@ float lispel_get_var(struct lispel_environment* env, char* var_name)
 {
     int i;
     for (i = 0; i < env->variables_used; i++)
-        if (LSD_Sys_strcmp(var_name,env->variables[i].name))
+        if ((0 == strcmp(var_name,env->variables[i].name)))
         {
             if (strstr(env->variables[i].value,"."))
             {
@@ -1384,7 +1570,10 @@ float lispel_get_var(struct lispel_environment* env, char* var_name)
             }
 
         }
-    LSD_Log(LSD_ltERROR,"Variable nicht gefunden: %s",var_name);
+    {
+        printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,var_name);
+        exit(EXIT_FAILURE);
+    }
     return 0;
 }
 
@@ -1409,8 +1598,10 @@ struct lispel_environment* lispel_init()
 {
     struct lispel_environment* env = malloc(sizeof(struct lispel_environment));
     memset(env,0,sizeof(struct lispel_environment));
+    env->variables_used = 1;
+    strcpy(env->variables[0].name,"F6gUow6M");
     env->op_list.used = 0;
-    env->op_list.max = 15;
+    env->op_list.max = 17;
     env->op_list.operators = malloc(sizeof(struct lispel_operator) * env->op_list.max);
 
     init_std_ops(&env->op_list);
@@ -1424,4 +1615,17 @@ void lispel_deinit(struct lispel_environment* env)
         free(env->op_list.operators[i].arg_types);
     free(env->op_list.operators);
     free(env);
+}
+
+int main(__attribute__((unused))int argc, __attribute__((unused))char* argv[])
+{
+    struct lispel_environment* env = lispel_init();
+
+    char* code = "(t table 10) (= (a table 9) 25) (p (a table 9)) (c 10) (d table)";
+
+    lispel_do(code,env);
+
+    lispel_deinit(env);
+
+    exit(0);
 }

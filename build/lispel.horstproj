@@ -9,5 +9,5 @@ lib_path: -L../libs/lib
 libraries: -lLSD
 source: ../src/implementations.c
 debugger: none
-dependencies: LSD
-d_type: static
+dependencies:
+d_type:
