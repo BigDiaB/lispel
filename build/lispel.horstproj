@@ -6,7 +6,7 @@ cxxflags: -g -std=c89 -W -Wall -Wextra
 out: lispel
 includes: -I../libs/include
 lib_path: -L../libs/lib
-libraries: -lLSD
+libraries:
 source: ../src/implementations.c
 debugger: none
 dependencies:
