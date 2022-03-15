@@ -4,6 +4,9 @@
 #include <stdbool.h>
 #include <string.h>
 
+/*#define DEBUG_MEM*/
+
+#include "debug.h"
 #include "lispel.h"
 
 enum lispel_type {
@@ -345,7 +348,9 @@ void do_expression(struct lispel_expression* expr, struct lispel_environment* en
             char** args = malloc(sizeof(char*) * (env->op_list.operators[op_index].num_args + 1));
 
             for (j = 0; j < env->op_list.operators[op_index].num_args; j++)
+            {
                 args[j] = malloc(env->op_list.operators[op_index].num_args * 1024);
+            }
 
             int* types = malloc(sizeof(int) * env->op_list.operators[op_index].num_args);
 
@@ -381,7 +386,9 @@ void do_expression(struct lispel_expression* expr, struct lispel_environment* en
 
             int k = 0;
             for (k = 0; k < env->op_list.operators[op_index].num_args; k++)
-                    free(args[k]);
+            {
+                free(args[k]);
+            }
             free(args);
             free(types);
 
@@ -485,6 +492,7 @@ void gen_blocks(char* data,char* rest, struct lispel_environment* env)
         }
         code++;
     }
+    free(initial_code);
 }
 
 
@@ -515,7 +523,10 @@ void lispel_do_block(char* result, char** args, int* __attribute__((unused))type
     gen_expressions(&st);
 
     for (i = 0; i < st.expressions_used; i++)
+    {
         do_expression(&st.expressions[i],env,result);
+        free(st.expressions[i].tokens);
+    }
 }
 
 void lispel_if_do_block(char* result, char** args, int* types, struct lispel_environment* env)
@@ -562,7 +573,10 @@ void lispel_if_do_block(char* result, char** args, int* types, struct lispel_env
         gen_expressions(&st);
 
         for (i = 0; i < st.expressions_used; i++)
+        {
             do_expression(&st.expressions[i],env,result);
+            free(st.expressions[i].tokens);
+        }
     }
 }
 
@@ -669,6 +683,8 @@ void lispel_bigger(char* result, char** args, int* types,struct lispel_environme
         sprintf(temp_result,"%d",res);
     }
 
+    free(num_1);
+    free(num_2);
 
     strcpy(result,temp_result);
 }
@@ -756,6 +772,8 @@ void lispel_smaller(char* result, char** args, int* types,struct lispel_environm
         sprintf(temp_result,"%d",res);
     }
 
+    free(num_1);
+    free(num_2);
 
     strcpy(result,temp_result);
 }
@@ -838,6 +856,15 @@ void lispel_print(char* result, char** args, int* types,struct lispel_environmen
 
 void lispel_var_destroy(char* result, char** args, int* types,struct lispel_environment* env)
 {
+
+    int i;
+    for (i = 0; i < env->variables_used; i++)
+        if ((0 == strcmp(args[0],env->variables[i].name)))
+        {
+            types[0] = env->variables[i].type;
+            break;
+        }
+
     if (types[0] == variable)
     {
         int i, num = -1;
@@ -845,10 +872,10 @@ void lispel_var_destroy(char* result, char** args, int* types,struct lispel_envi
             if ((0 == strcmp(args[0],env->variables[i].name)))
                 num = i;
         if (num == -1)
-            {
-                printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[0]);
-                exit(EXIT_FAILURE);
-            }
+        {
+            printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[0]);
+            exit(EXIT_FAILURE);
+        }
 
         free(env->variables[num].value);
 
@@ -856,7 +883,7 @@ void lispel_var_destroy(char* result, char** args, int* types,struct lispel_envi
             env->variables[i] = env->variables[i + 1];
         env->variables_used--;
     }
-
+    
     if (types[0] == table)
     {
         int num = -1,g;
@@ -864,10 +891,16 @@ void lispel_var_destroy(char* result, char** args, int* types,struct lispel_envi
             if ((0 == strcmp(args[0],env->variables[g].name)))
                 num = g;
         if (num == -1)
-            {
-                printf("%s:%d: Error!:\n\tTable nicht gefunden: %s",__FUNCTION__,__LINE__,args[0]);
-                exit(EXIT_FAILURE);
-            }
+        {
+            printf("%s:%d: Error!:\n\tTable nicht gefunden: %s",__FUNCTION__,__LINE__,args[0]);
+            exit(EXIT_FAILURE);
+        }
+
+
+        for (g = 0; g < env->variables[num].table_length; g++)
+        {
+            free(env->variables[num].table_values[g]);
+        }
 
         free(env->variables[num].table_values);
 
@@ -989,7 +1022,9 @@ void lispel_table_new(char* result, char** args, int* types,struct lispel_enviro
     env->variables[env->variables_used].table_values = malloc(size * sizeof(char*));
 
     for (g = 0; g < size; g++)
+    {
         env->variables[env->variables_used].table_values[g] = malloc(1024);
+    }
     
     env->variables_used++;
     strcpy(result,args[0]);
@@ -1139,6 +1174,8 @@ void lispel_add(char* result, char** args, int* types,struct lispel_environment*
         sprintf(temp_result,"%d",res);
     }
 
+    free(num_1);
+    free(num_2);
 
     strcpy(result,temp_result);
 }
@@ -1219,6 +1256,8 @@ void lispel_sub(char* result, char** args, int* types,struct lispel_environment*
         sprintf(temp_result,"%d",res);
     }
 
+    free(num_1);
+    free(num_2);
 
     strcpy(result,temp_result);
 }
@@ -1299,6 +1338,8 @@ void lispel_mul(char* result, char** args, int* types,struct lispel_environment*
         sprintf(temp_result,"%d",res);
     }
 
+    free(num_1);
+    free(num_2);
 
     strcpy(result,temp_result);
 }
@@ -1379,6 +1420,8 @@ void lispel_dib(char* result, char** args, int* types,struct lispel_environment*
         sprintf(temp_result,"%f",res);
     }
 
+    free(num_1);
+    free(num_2);
 
     strcpy(result,temp_result);
 }
@@ -1670,7 +1713,10 @@ void lispel_do(char* script, struct lispel_environment* env)
     gen_expressions(&st);
 
     for (i = 0; i < st.expressions_used; i++)
+    {
         do_expression(&st.expressions[i],env,result);
+        free(st.expressions[i].tokens);
+    }
 }
 
 struct lispel_environment* lispel_init()
@@ -1691,7 +1737,9 @@ void lispel_deinit(struct lispel_environment* env)
 {
     int i;
     for (i = 0; i < env->op_list.used; i++)
+    {
         free(env->op_list.operators[i].arg_types);
+    }
     free(env->op_list.operators);
     free(env);
 }
@@ -1701,7 +1749,7 @@ int main(__attribute__((unused))int argc, __attribute__((unused))char* argv[])
     struct lispel_environment* env = lispel_init();
 
     char* code =
-    "(t table (/ 4 2))"
+    "(t table 2)"
 
     "(= (a table 0) (+ 12 12))"
     "(= (a table 1) (+ 400 12))"
@@ -1716,6 +1764,10 @@ int main(__attribute__((unused))int argc, __attribute__((unused))char* argv[])
     lispel_do(code,env);
 
     lispel_deinit(env);
+
+    #ifdef DEBUG_MEM
+    DEBUG_MEMeval();
+    #endif
 
     exit(0);
 }

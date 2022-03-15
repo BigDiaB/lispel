@@ -1,13 +1,13 @@
 
 
 gxx: clang
-gxxflags: -O0
-cxxflags: -g -std=c89 -W -Wall -Wextra
+gxxflags:  -O0
+cxxflags:  -g -std=c89 -g -W -Wall -Wextra
 out: lispel
 includes: -I../libs/include
 lib_path: -L../libs/lib
 libraries:
-source: ../src/implementations.c
+source: ../src/implementations.c ../src/debug.c
 debugger: none
 dependencies:
 d_type:
