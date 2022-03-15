@@ -4,7 +4,6 @@
 #include <stdbool.h>
 #include <string.h>
 
-#include "debug.h"
 #include "lispel.h"
 
 enum lispel_type {
@@ -1763,14 +1762,9 @@ int main(__attribute__((unused))int argc, __attribute__((unused))char* argv[])
 
     "(d table)";
 
-    while(1)
     lispel_do(code,env);
 
     lispel_deinit(env);
-
-    #ifdef DEBUG_MEM
-    DEBUG_MEMeval();
-    #endif
 
     exit(0);
 }

@@ -2,7 +2,7 @@
 
 gxx: clang
 gxxflags:  -O0
-cxxflags:  -g -std=c89 -g -W -Wall -Wextra
+cxxflags:  -g -std=c89 -g -W -Wall -Wextra -Wno-comment
 out: lispel
 includes: -I../libs/include
 lib_path: -L../libs/lib
