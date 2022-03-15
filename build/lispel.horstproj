@@ -7,7 +7,7 @@ out: lispel
 includes: -I../libs/include
 lib_path: -L../libs/lib
 libraries:
-source: ../src/implementations.c ../src/debug.c
+source: ../src/*.c
 debugger: none
 dependencies:
 d_type:

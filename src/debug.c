@@ -48,10 +48,10 @@ void DEBUG_MEMeval()
 {
 	printf("###DEBUG_MEM/###\n");
 	if (DEBUG_MEMused == 0)
-		printf("Alles super, keine ungefreeten Pointer!\n");
+		printf("DEBUG_MEM:\n\tAlles super, keine ungefreeten Pointer!\n");
 	else
 	{
-		printf("Folgende Pointer wurden nicht gefreet!:\n");
+		printf("DEBUG_MEM:\n\tFolgende Pointer wurden nicht gefreet!:\n");
 		int i;
 		for (i = 0; i < DEBUG_MEMused; i++)
 			printf("%s: %d\n",DEBUG_MEMfiles[i],DEBUG_MEMlines[i]);

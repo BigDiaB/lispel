@@ -4,8 +4,6 @@
 #include <stdbool.h>
 #include <string.h>
 
-/*#define DEBUG_MEM*/
-
 #include "debug.h"
 #include "lispel.h"
 
@@ -101,7 +99,6 @@ void gen_chunks(struct lispel_environment* env, char* line)
                 i++;
             }
             
-
             env->chunks[env->chunks_used] = chunk;
             env->chunks_used++;
         }
@@ -544,7 +541,7 @@ void lispel_if_do_block(char* result, char** args, int* types, struct lispel_env
     if (types[0] == variable)
     {
         int num = -1,g;
-        for (g = 0; g < env->variables_used; g++)
+        for (g = env->variables_used; g >= 0 ; g--)
             if ((0 == strcmp(args[0],env->variables[g].name)))
                 num = g;
         if (num == -1)
@@ -586,7 +583,7 @@ void lispel_negate(char* result, char** args, int* types,struct lispel_environme
     if (types[0] == variable)
     {
         int num = -1;
-        for (g = 0; g < env->variables_used; g++)
+        for (g = env->variables_used; g >= 0 ; g--)
             if ((0 == strcmp(args[0],env->variables[g].name)))
                 num = g;
         if (num == -1)
@@ -606,7 +603,7 @@ void lispel_bigger(char* result, char** args, int* types,struct lispel_environme
     if (types[0] == variable)
     {
         int num = -1;
-        for (g = 0; g < env->variables_used; g++)
+        for (g = env->variables_used; g >= 0 ; g--)
             if ((0 == strcmp(args[0],env->variables[g].name)))
                 num = g;
         if (num == -1)
@@ -619,7 +616,7 @@ void lispel_bigger(char* result, char** args, int* types,struct lispel_environme
     if (types[1] == variable)
     {
         int num = -1;
-        for (g = 0; g < env->variables_used; g++)
+        for (g = env->variables_used; g >= 0 ; g--)
             if ((0 == strcmp(args[1],env->variables[g].name)))
                 num = g;
         if (num == -1)
@@ -695,7 +692,7 @@ void lispel_smaller(char* result, char** args, int* types,struct lispel_environm
     if (types[0] == variable)
     {
         int num = -1;
-        for (g = 0; g < env->variables_used; g++)
+        for (g = env->variables_used; g >= 0 ; g--)
             if ((0 == strcmp(args[0],env->variables[g].name)))
                 num = g;
         if (num == -1)
@@ -708,7 +705,7 @@ void lispel_smaller(char* result, char** args, int* types,struct lispel_environm
     if (types[1] == variable)
     {
         int num = -1;
-        for (g = 0; g < env->variables_used; g++)
+        for (g = env->variables_used; g >= 0 ; g--)
             if ((0 == strcmp(args[1],env->variables[g].name)))
                 num = g;
         if (num == -1)
@@ -784,7 +781,7 @@ void lispel_equality(char* result, char** args, int* types,struct lispel_environ
     if (types[0] == variable)
     {
         int num = -1;
-        for (g = 0; g < env->variables_used; g++)
+        for (g = env->variables_used; g >= 0 ; g--)
             if ((0 == strcmp(args[0],env->variables[g].name)))
                 num = g;
         if (num == -1)
@@ -797,7 +794,7 @@ void lispel_equality(char* result, char** args, int* types,struct lispel_environ
     if (types[1] == variable)
     {
         int num = -1;
-        for (g = 0; g < env->variables_used; g++)
+        for (g = env->variables_used; g >= 0 ; g--)
             if ((0 == strcmp(args[1],env->variables[g].name)))
                 num = g;
         if (num == -1)
@@ -817,7 +814,7 @@ void lispel_character(char* result, char** args, int* types,struct lispel_enviro
     if (types[0] == variable)
     {
         int num = -1;
-        for (g = 0; g < env->variables_used; g++)
+        for (g = env->variables_used; g >= 0 ; g--)
             if ((0 == strcmp(args[0],env->variables[g].name)))
                 num = g;
         if (num == -1)
@@ -841,7 +838,7 @@ void lispel_print(char* result, char** args, int* types,struct lispel_environmen
     {
         int g;
         int num = -1;
-        for (g = 0; g < env->variables_used; g++)
+        for (g = env->variables_used; g >= 0 ; g--)
             if ((0 == strcmp(args[0],env->variables[g].name)))
                 num = g;
         if (num == -1)
@@ -858,7 +855,7 @@ void lispel_var_destroy(char* result, char** args, int* types,struct lispel_envi
 {
 
     int i;
-    for (i = 0; i < env->variables_used; i++)
+    for (i = env->variables_used; i >= 0 ; i--)
         if ((0 == strcmp(args[0],env->variables[i].name)))
         {
             types[0] = env->variables[i].type;
@@ -868,7 +865,7 @@ void lispel_var_destroy(char* result, char** args, int* types,struct lispel_envi
     if (types[0] == variable)
     {
         int i, num = -1;
-        for (i = 0; i < env->variables_used; i++)
+        for (i = env->variables_used; i >= 0 ; i--)
             if ((0 == strcmp(args[0],env->variables[i].name)))
                 num = i;
         if (num == -1)
@@ -887,7 +884,7 @@ void lispel_var_destroy(char* result, char** args, int* types,struct lispel_envi
     if (types[0] == table)
     {
         int num = -1,g;
-        for (g = 0; g < env->variables_used; g++)
+        for (g = env->variables_used; g >= 0 ; g--)
             if ((0 == strcmp(args[0],env->variables[g].name)))
                 num = g;
         if (num == -1)
@@ -906,7 +903,7 @@ void lispel_var_destroy(char* result, char** args, int* types,struct lispel_envi
 
         for (g = num; g < env->variables_used - 1; g++)
                 env->variables[g] = env->variables[g + 1];
-            env->variables_used--;
+        env->variables_used--;
     }
 
     strcpy(result,"0");
@@ -920,7 +917,7 @@ void lispel_var_assign(char* result, char** args, int* types,struct lispel_envir
     if (types[1] == variable)
     {
         int num = -1;
-        for (g = 0; g < env->variables_used; g++)
+        for (g = env->variables_used; g >= 0 ; g--)
             if ((0 == strcmp(args[1],env->variables[g].name)))
                 num = g;
         if (num == -1)
@@ -931,7 +928,7 @@ void lispel_var_assign(char* result, char** args, int* types,struct lispel_envir
         strcpy(args[1],env->variables[num].value);
     }
 
-    for (g = 0; g < env->variables_used; g++)
+    for (g = env->variables_used; g >= 0 ; g--)
     {
         if ((0 == strcmp(args[0],env->variables[g].name)))
             var = &env->variables[g];
@@ -982,7 +979,7 @@ void lispel_table_new(char* result, char** args, int* types,struct lispel_enviro
     if (types[1] == variable)
     {
         int num = -1;
-        for (g = 0; g < env->variables_used; g++)
+        for (g = env->variables_used; g >= 0 ; g--)
             if ((0 == strcmp(args[1],env->variables[g].name)))
                 num = g;
         if (num == -1)
@@ -1109,7 +1106,7 @@ void lispel_add(char* result, char** args, int* types,struct lispel_environment*
         if (types[l] == variable)
         {
             int num = -1;
-            for (g = 0; g < env->variables_used; g++)
+            for (g = env->variables_used; g >= 0 ; g--)
                 if ((0 == strcmp(args[l],env->variables[g].name)))
                     num = g;
             if (num == -1)
@@ -1191,7 +1188,7 @@ void lispel_sub(char* result, char** args, int* types,struct lispel_environment*
         if (types[l] == variable)
         {
             int num = -1;
-            for (g = 0; g < env->variables_used; g++)
+            for (g = env->variables_used; g >= 0 ; g--)
                 if ((0 == strcmp(args[l],env->variables[g].name)))
                     num = g;
             if (num == -1)
@@ -1273,7 +1270,7 @@ void lispel_mul(char* result, char** args, int* types,struct lispel_environment*
         if (types[l] == variable)
         {
             int num = -1;
-            for (g = 0; g < env->variables_used; g++)
+            for (g = env->variables_used; g >= 0 ; g--)
                 if ((0 == strcmp(args[l],env->variables[g].name)))
                     num = g;
             if (num == -1)
@@ -1355,7 +1352,7 @@ void lispel_dib(char* result, char** args, int* types,struct lispel_environment*
         if (types[l] == variable)
         {
             int num = -1;
-            for (g = 0; g < env->variables_used; g++)
+            for (g = env->variables_used; g >= 0 ; g--)
                 if ((0 == strcmp(args[l],env->variables[g].name)))
                     num = g;
             if (num == -1)
@@ -1704,8 +1701,11 @@ void lispel_do(char* script, struct lispel_environment* env)
     char result[1024] = {0};
     int i;
 
+
+
     struct lispel_state st;
     memset(&st,0,sizeof(struct lispel_state));
+    env->chunks_used = 0;
 
     gen_blocks(script,script,env);
     gen_chunks(env,script);
@@ -1740,6 +1740,8 @@ void lispel_deinit(struct lispel_environment* env)
     {
         free(env->op_list.operators[i].arg_types);
     }
+    free(env->variables[1].value);
+    free(env->variables[2].value);
     free(env->op_list.operators);
     free(env);
 }
@@ -1761,6 +1763,7 @@ int main(__attribute__((unused))int argc, __attribute__((unused))char* argv[])
 
     "(d table)";
 
+    while(1)
     lispel_do(code,env);
 
     lispel_deinit(env);
