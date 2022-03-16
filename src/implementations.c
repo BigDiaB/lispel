@@ -1745,26 +1745,26 @@ void lispel_deinit(struct lispel_environment* env)
     free(env);
 }
 
-int main(__attribute__((unused))int argc, __attribute__((unused))char* argv[])
-{
-    struct lispel_environment* env = lispel_init();
+// int main(__attribute__((unused))int argc, __attribute__((unused))char* argv[])
+// {
+//     struct lispel_environment* env = lispel_init();
 
-    char* code =
-    "(t table 2)"
+//     char* code =
+//     "(t table 2)"
 
-    "(= (a table 0) (+ 12 12))"
-    "(= (a table 1) (+ 400 12))"
+//     "(= (a table 0) (+ 12 12))"
+//     "(= (a table 1) (+ 400 12))"
 
-    "(p (a table 1))"
-    "(c 32)"
-    "(p (a table 0))"
-    "(c 10)"
+//     "(p (a table 1))"
+//     "(c 32)"
+//     "(p (a table 0))"
+//     "(c 10)"
 
-    "(d table)";
+//     "(d table)";
 
-    lispel_do(code,env);
+//     lispel_do(code,env);
 
-    lispel_deinit(env);
+//     lispel_deinit(env);
 
-    exit(0);
-}
+//     exit(0);
+// }
