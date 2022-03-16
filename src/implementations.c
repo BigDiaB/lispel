@@ -1739,8 +1739,6 @@ void lispel_deinit(struct lispel_environment* env)
     {
         free(env->op_list.operators[i].arg_types);
     }
-    free(env->variables[1].value);
-    free(env->variables[2].value);
     free(env->op_list.operators);
     free(env);
 }
