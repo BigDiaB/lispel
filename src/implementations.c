@@ -821,13 +821,33 @@ void lispel_character(char* result, char** args, int* types,struct lispel_enviro
                 printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[0]);
                 exit(EXIT_FAILURE);
             }
-        strcpy(args[0],env->variables[num].value);
-    }
-    sscanf(args[0],"%d",&g);
-    char chara[2] = {g,0};
+        if (env->variables[num].type == table)
+        {
+            int i;
+            for (i = 0; i < env->variables[num].table_length; i++)
+            {
+                sscanf(env->variables[num].table_values[i],"%d",&g);
+                char chara[2] = {g,0};
 
-    strcpy(result,args[0]);
-    printf("%s",chara);
+                strcpy(result,args[0]);
+                printf("%s",chara);
+            }
+        }
+        else
+        {
+            sscanf(args[0],"%d",&g);
+            char chara[2] = {g,0};
+            strcpy(result,args[0]);
+            printf("%s",chara);
+        }
+    }
+    else
+    {
+        sscanf(args[0],"%d",&g);
+        char chara[2] = {g,0};
+        strcpy(result,args[0]);
+        printf("%s",chara);
+    }
 }
 
 void lispel_print(char* result, char** args, int* types,struct lispel_environment* env)
@@ -845,9 +865,17 @@ void lispel_print(char* result, char** args, int* types,struct lispel_environmen
                 printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[0]);
                 exit(EXIT_FAILURE);
             }
-        strcpy(args[0],env->variables[num].value);
+        if (env->variables[num].type == table)
+        {
+            int i;
+            for (i = 0; i < env->variables[num].table_length; i++)
+                printf("%s ",env->variables[num].table_values[i]);
+        }
+        else
+            printf("%s",env->variables[num].value);
     }
-    printf("%s",args[0]);
+    else
+        printf("%s",args[0]);
 }
 
 void lispel_var_destroy(char* result, char** args, int* types,struct lispel_environment* env)
@@ -1014,6 +1042,12 @@ void lispel_table_new(char* result, char** args, int* types,struct lispel_enviro
         exit(EXIT_FAILURE);
     }
 
+    if (size < 1)
+    {
+        printf("%s:%d: Error!:\n\tTables können nicht weniger als einen Platz haben: %d",__FUNCTION__,__LINE__,size);
+        exit(EXIT_FAILURE);
+    }
+
     env->variables[env->variables_used].table_length = size;
     env->variables[env->variables_used].table_values = malloc(size * sizeof(char*));
 
@@ -1088,6 +1122,75 @@ void lispel_table_at(char* result, char** args, int* types,struct lispel_environ
     strcat(env->variables[0].name,"_table_temp");
 
     env->variables[0].value = env->variables[num].table_values[index];
+
+    strcpy(result,env->variables[0].name);
+}
+
+void lispel_table_resize(char* result, char** args, int* types,struct lispel_environment* env)
+{
+    int g;
+    if (types[1] == variable)
+    {
+        int num = -1;
+        for (g = 0; g < env->variables_used; g++)
+            if ((0 == strcmp(args[1],env->variables[g].name)))
+                num = g;
+        if (num == -1)
+            {
+                printf("%s:%d: Error!:\n\tVariable nicht gefunden: %s",__FUNCTION__,__LINE__,args[1]);
+                exit(EXIT_FAILURE);
+            }
+        strcpy(args[1],env->variables[num].value);
+    }
+
+    if (strstr(args[1],"."))
+    {
+        int i;
+
+        for (i = strlen(args[1] + 1); i > 0 && args[1][i + 1] != '.'; i--)
+        {
+            if (args[1][i] == '0' || args[1][i] == '.')
+                args[1][i] = 0;
+        } 
+        if (strstr(args[1],"."))
+        {
+            printf("%s:%d: Error!:\n\tDie Länge von Tables kann nicht mit Dezimalzahlen dargestellt werden!",__FUNCTION__,__LINE__);
+            exit(EXIT_FAILURE);
+        }        
+    }
+
+    int new_size;
+    if (0 == sscanf(args[1],"%d",&new_size))
+    {
+        printf("%s:%d: Error!:\n\tKeine gültige Länge!: %s\n",__FUNCTION__,__LINE__,args[1]);
+        exit(EXIT_FAILURE);
+    }
+
+    int num = -1;
+    for (g = 0; g < env->variables_used; g++)
+    {
+        if ((0 == strcmp(args[0],env->variables[g].name)) && env->variables[g].type == table)
+            num = g;
+    }
+    if (num == -1)
+    {
+        printf("%s:%d: Error!:\n\tTable nicht gefunden: %s",__FUNCTION__,__LINE__,args[0]);
+        exit(EXIT_FAILURE);
+    }
+
+    if (new_size < 1)
+    {
+        printf("%s:%d: Error!:\n\tTables können nicht weniger als einen Platz haben: %d",__FUNCTION__,__LINE__,new_size);
+        exit(EXIT_FAILURE);
+    }
+
+    env->variables[num].table_values = malloc(new_size * sizeof(char*));
+    for (g = env->variables[num].table_length - 1; g < new_size; g++)
+    {
+        env->variables[num].table_values[g] = malloc(1024);
+        memset(env->variables[num].table_values[g],0,1024);
+    }
+    env->variables[num].table_length = new_size;
 
     strcpy(result,env->variables[0].name);
 }
@@ -1551,6 +1654,17 @@ void init_std_ops(struct lispel_op_list* op_list)
     (*op_list).used++;
 
 
+
+    (*op_list).operators[(*op_list).used].name = "r";
+    (*op_list).operators[(*op_list).used].num_args = 2;
+    (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_type) * (*op_list).operators[(*op_list).used].num_args);
+    (*op_list).operators[(*op_list).used].arg_types[0] = variable;
+    (*op_list).operators[(*op_list).used].arg_types[1] = number;
+    (*op_list).operators[(*op_list).used].func = lispel_table_resize;
+    (*op_list).used++;
+
+
+
     (*op_list).operators[(*op_list).used].name = "d";
     (*op_list).operators[(*op_list).used].num_args = 1;
     (*op_list).operators[(*op_list).used].arg_types = malloc(sizeof(enum lispel_type) * (*op_list).operators[(*op_list).used].num_args);
@@ -1582,7 +1696,6 @@ void init_std_ops(struct lispel_op_list* op_list)
     (*op_list).operators[(*op_list).used].arg_types[0] = variable;
     (*op_list).operators[(*op_list).used].func = lispel_do_block;
     (*op_list).used++;
-
         
 	if (op_list->used > op_list->max)
 	{
@@ -1705,10 +1818,11 @@ void lispel_do(char* script, struct lispel_environment* env)
     struct lispel_state st;
     memset(&st,0,sizeof(struct lispel_state));
     env->chunks_used = 0;
+    char* new_script = malloc(strlen(script) + 1);
 
-    gen_blocks(script,script,env);
-    gen_chunks(env,script);
-    gen_tokens(script,env,&st);
+    gen_blocks(script,new_script,env);
+    gen_chunks(env,new_script);
+    gen_tokens(new_script,env,&st);
     gen_expressions(&st);
 
     for (i = 0; i < st.expressions_used; i++)
@@ -1725,7 +1839,7 @@ struct lispel_environment* lispel_init()
     env->variables_used = 1;
     strcpy(env->variables[0].name,"F6gUow6M");
     env->op_list.used = 0;
-    env->op_list.max = 17;
+    env->op_list.max = 18;
     env->op_list.operators = malloc(sizeof(struct lispel_operator) * env->op_list.max);
 
     init_std_ops(&env->op_list);
@@ -1743,26 +1857,26 @@ void lispel_deinit(struct lispel_environment* env)
     free(env);
 }
 
-// int main(__attribute__((unused))int argc, __attribute__((unused))char* argv[])
-// {
-//     struct lispel_environment* env = lispel_init();
+int main(__attribute__((unused))int argc, __attribute__((unused))char* argv[])
+{
+    struct lispel_environment* env = lispel_init();
 
-//     char* code =
-//     "(t table 2)"
+    char* code =
+    "(t table 1)"
+    "(r table 3)"
+    "(v temp 65)"
+    "{:test: (= (a table (- temp 65)) temp) (= temp (+ temp 1)) (i (< temp 68) test)}"
 
-//     "(= (a table 0) (+ 12 12))"
-//     "(= (a table 1) (+ 400 12))"
+    "(b test)"
+    "(c table)"
+    "(c 10)"
 
-//     "(p (a table 1))"
-//     "(c 32)"
-//     "(p (a table 0))"
-//     "(c 10)"
+    "(d table)"
+    "(d temp)";
 
-//     "(d table)";
+    lispel_do(code,env);
 
-//     lispel_do(code,env);
+    lispel_deinit(env);
 
-//     lispel_deinit(env);
-
-//     exit(0);
-// }
+    exit(0);
+}
