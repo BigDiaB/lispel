@@ -1857,26 +1857,27 @@ void lispel_deinit(struct lispel_environment* env)
     free(env);
 }
 
-int main(__attribute__((unused))int argc, __attribute__((unused))char* argv[])
-{
-    struct lispel_environment* env = lispel_init();
+// int main(__attribute__((unused))int argc, __attribute__((unused))char* argv[])
+// {
+//     struct lispel_environment* env = lispel_init();
 
-    char* code =
-    "(t table 1)"
-    "(r table 3)"
-    "(v temp 65)"
-    "{:test: (= (a table (- temp 65)) temp) (= temp (+ temp 1)) (i (< temp 68) test)}"
+//     char* code =
+//     "(t table 1)"
+//     "(r table 3)"
+//     "(v temp 65)"
 
-    "(b test)"
-    "(c table)"
-    "(c 10)"
+//     "{:test: (= (a table (- temp 65)) temp) (= temp (+ temp 1)) (i (< temp 68) test)}"
+//     "(b test)"
 
-    "(d table)"
-    "(d temp)";
+//     "(c table)"
+//     "(c 10)"
 
-    lispel_do(code,env);
+//     "(d table)"
+//     "(d temp)";
 
-    lispel_deinit(env);
+//     lispel_do(code,env);
 
-    exit(0);
-}
+//     lispel_deinit(env);
+
+//     exit(0);
+// }
